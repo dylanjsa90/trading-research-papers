@@ -1,0 +1,7 @@
+.env.local
+.env
+papers/
+.venv/
+.python-version
+.browser-profile/
+__pycache__/
