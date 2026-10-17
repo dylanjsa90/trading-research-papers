@@ -12,12 +12,11 @@ retrieval (e.g. through a library).
 
 ## Status (2026-10-15)
 
-| Status       | Count | Meaning                                                    |
-|--------------|------:|------------------------------------------------------------|
-| `downloaded` |   655 | PDF saved in `papers/`                                     |
-| `not_found`  |   343 | No accessible PDF; `note` says why (see below)             |
-| `error`      |     1 | Downloader crashed on this row (rank 277)                  |
-| `recovered`  |     1 | Added by hand (rank 999)                                   |
+| Status       | Count | Meaning                                        |
+| ------------ | ----: | ---------------------------------------------- |
+| `downloaded` |   655 | PDF saved in `papers/`                         |
+| `not_found`  |   343 | No accessible PDF; `note` says why (see below) |
+| `error`      |     1 | Downloader crashed on this row (rank 277)      |
 
 The `not_found` notes break down roughly as: paywalled publishers (Springer, Elsevier,
 Wiley, T&F, SAGE, INFORMS, IEEE…), 32 behind a CAPTCHA even in a normal browser (all
@@ -26,14 +25,20 @@ ScienceDirect entries plus ranks 90 and 718), and a few dead or retitled entries
 ## Repository layout
 
 ```
-paperdigest-downloader.py  Step 1: parse the Paper Digest list and download open-access PDFs
+main.py  Step 1: parse the Paper Digest list and download open-access PDFs
 browser-download.py        Step 2: retry `not_found` entries in a real (Playwright) browser
 paperlib.py                Shared by both: PDF title check and manifest writer (JSON + CSV)
 download-papers.py         Legacy arXiv-only scraper (superseded by paperdigest-downloader.py)
 main.py                    Placeholder entry point (unused)
+docs/research/             Research notes drawing on the corpus (cited)
+docs/plans/                Build plans for systems based on that research
 papers/                    PDFs + manifest.json / manifest.csv (git-ignored, ~1.1 GB)
 .env                       UNPAYWALL_EMAIL=… for the Unpaywall API (not committed)
 ```
+
+The research note [What it takes to build LLM-based algorithmic trading](docs/research/llm-algo-trading.md)
+draws on this corpus. Its implementation plan is
+[LLM trading build plan](docs/plans/llm-trading-build-plan.md).
 
 ## Setup
 
@@ -49,7 +54,7 @@ a contact email. Scripts don't read `.env` themselves, so pass it to uv with `--
 
 ## Pipeline
 
-### 1. List and download: `paperdigest-downloader.py`
+### 1. List and download: `main.py`
 
 ```bash
 uv run --env-file .env python paperdigest-downloader.py            # full run
@@ -102,16 +107,16 @@ through the same title check.
 
 `papers/manifest.json` is the source of truth: one object per paper, keyed by `rank`.
 
-| Field       | Description                                                        |
-|-------------|--------------------------------------------------------------------|
-| `rank`      | Position on the Paper Digest list (1–1000)                         |
-| `title`, `authors`, `source`, `date` | As listed by Paper Digest                 |
-| `view_url`  | Paper Digest's "View" link (usually a DOI)                         |
-| `status`    | `downloaded`, `not_found`, `error`, `recovered`                    |
-| `pdf_path`  | File name inside `papers/`                                         |
-| `pdf_url`   | Where the PDF was actually fetched from                            |
-| `note`      | Why an entry isn't downloaded; notes starting with `browser:` come from step 2 |
-| `tried`     | Every candidate URL attempted                                      |
+| Field                                | Description                                                                    |
+| ------------------------------------ | ------------------------------------------------------------------------------ |
+| `rank`                               | Position on the Paper Digest list (1–1000)                                     |
+| `title`, `authors`, `source`, `date` | As listed by Paper Digest                                                      |
+| `view_url`                           | Paper Digest's "View" link (usually a DOI)                                     |
+| `status`                             | `downloaded`, `not_found`, `error`, `recovered`                                |
+| `pdf_path`                           | File name inside `papers/`                                                     |
+| `pdf_url`                            | Where the PDF was actually fetched from                                        |
+| `note`                               | Why an entry isn't downloaded; notes starting with `browser:` come from step 2 |
+| `tried`                              | Every candidate URL attempted                                                  |
 
 PDFs are named `{rank:04d}_{Title}.pdf`. The title is ASCII-folded, runs of anything
 non-alphanumeric become `_`, and the result is cut to 80 characters.
