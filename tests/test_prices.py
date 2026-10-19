@@ -1,6 +1,7 @@
 from datetime import date
 
 import pandas as pd
+import pytest
 
 from trader.data import prices, store
 
@@ -79,3 +80,11 @@ def test_session_inside_the_sip_delay_is_not_stored(tmp_path):
     assert prices.refresh(["AAPL"], fetch=fake, root=tmp_path, start=date(2024, 3, 1), now=ten_past_close) == 0
     later = pd.Timestamp("2024-03-04 16:20", tz="America/New_York")
     assert prices.refresh(["AAPL"], fetch=fake, root=tmp_path, start=date(2024, 3, 1), now=later) == 1
+
+
+def test_bars_frame_refuses_bars_not_stamped_at_new_york_midnight():
+    # A bar stamped 00:00 UTC is 19:00/20:00 the previous New York day; labelling it with that day would shift
+    # every session one day earlier (look-ahead), so the assumption about Alpaca's stamps must fail loudly.
+    raw = _alpaca_df([("AAPL", "2024-07-02T00:00:00Z", 216.75)])
+    with pytest.raises(ValueError, match="midnight"):
+        prices.bars_frame(raw)

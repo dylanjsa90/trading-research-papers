@@ -26,7 +26,10 @@ def bars_frame(raw):
     if raw.empty:
         return pd.DataFrame(columns=COLUMNS)
     df = raw.reset_index()
-    session = df["timestamp"].dt.tz_convert("America/New_York").dt.normalize()
+    stamp = df["timestamp"].dt.tz_convert("America/New_York")
+    session = stamp.dt.normalize()
+    if (stamp != session).any():
+        raise ValueError("expected daily bars stamped at midnight New York; session dates would be wrong")
     df["date"] = session.dt.strftime("%Y-%m-%d")
     df["available_at"] = (session + pd.Timedelta(hours=16)).dt.tz_convert("UTC")
     return df[COLUMNS]

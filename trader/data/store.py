@@ -61,6 +61,16 @@ def latest(table, column, root=None):
     return value["v"].iloc[0]
 
 
+def list_items(table, column, root=None):
+    """Distinct items across a list-valued column, e.g. every symbol that any stored article mentions."""
+    folder = Path(root or config.DATA_DIR) / table
+    if not any(folder.glob("*.parquet")):
+        return set()
+    with duckdb.connect() as con:
+        rows = con.execute(f'SELECT DISTINCT unnest("{column}") FROM read_parquet(?)', [str(folder / "*.parquet")])
+        return {item for (item,) in rows.fetchall()}
+
+
 def as_of(table, ts, root=None):
     """All rows of `table` with available_at <= ts. ts must be timezone-aware: a naive time is ambiguous by
     hours, which is exactly the size of the leaks this guards against."""

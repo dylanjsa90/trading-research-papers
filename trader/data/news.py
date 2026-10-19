@@ -43,31 +43,35 @@ def _pages(session, limiter, credentials, params):
 def refresh(symbols=config.UNIVERSE, root=None, session=None, credentials=None, limiter=None, start=None,
             end=None, flush_every=2000):  # fmt: skip
     """Fetch articles from the newest stored one (or `start`) to `end`, saving every `flush_every` articles so
-    an interrupted backfill resumes where it stopped. Returns articles added."""
+    an interrupted backfill resumes where it stopped. Symbols that no stored article mentions yet (say, added
+    to the universe later) are first backfilled from `start`. Returns articles added."""
+    start = pd.Timestamp(start or config.HISTORY_START)
+    start = start if start.tzinfo else start.tz_localize("UTC")
+    end = pd.Timestamp(end or pd.Timestamp.now(tz="UTC"))
     newest = store.latest("news", "created_at", root)
-    if newest is not None:
-        start = newest
+    if newest is None:
+        runs = [(symbols, start, end)]
     else:
-        start = pd.Timestamp(start or config.HISTORY_START)
-        start = start if start.tzinfo else start.tz_localize("UTC")
-    aliases = [old for old, new in config.SYMBOL_ALIASES.items() if new in symbols]
-    params = {
-        "symbols": ",".join([*symbols, *aliases]),
-        "start": _iso(start),
-        "end": _iso(end or pd.Timestamp.now(tz="UTC")),
-    }
-    pages = _pages(session or requests.Session(), limiter or web.RateLimiter(per_second=3),
-                   credentials or config.alpaca_credentials(), params)  # fmt: skip
+        missing = [s for s in symbols if s not in store.list_items("news", "symbols", root)]
+        runs = ([(missing, start, newest)] if missing else []) + [(symbols, newest, end)]
+    session = session or requests.Session()
+    limiter = limiter or web.RateLimiter(per_second=3)
+    credentials = credentials or config.alpaca_credentials()
 
     def save(items):
         return store.upsert("news", articles_frame(items), key=["id"], partition="month", root=root)
 
-    added, buffer = 0, []
-    for items in pages:
-        buffer += items
-        if len(buffer) >= flush_every:
-            added, buffer = added + save(buffer), []
-    return added + (save(buffer) if buffer else 0)
+    added = 0
+    for run_symbols, since, until in runs:
+        aliases = [old for old, new in config.SYMBOL_ALIASES.items() if new in run_symbols]
+        params = {"symbols": ",".join([*run_symbols, *aliases]), "start": _iso(since), "end": _iso(until)}
+        buffer = []
+        for items in _pages(session, limiter, credentials, params):
+            buffer += items
+            if len(buffer) >= flush_every:
+                added, buffer = added + save(buffer), []
+        added += save(buffer) if buffer else 0
+    return added
 
 
 def count_day(day, session=None, credentials=None, limiter=None):
