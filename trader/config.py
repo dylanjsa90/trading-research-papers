@@ -65,9 +65,20 @@ class RiskLimits:
 RISK = RiskLimits()
 
 # --- Models (§4.2): pinned snapshots; changing one starts a new evaluation ----------------------
-TAGGER_MODEL = "claude-haiku-5-5"
+# The tagger runs on a local OpenAI-compatible server first (LM Studio by default; Ollama and llama.cpp
+# speak the same API), before paying for a hosted model. The ID is what the server's /v1/models lists.
+TAGGER_MODEL = "gemma-4-e4b-it"  # lmstudio-community/gemma-4-E4B-it-GGUF, Q4_K_M
 REVIEW_MODEL = "claude-opus-5-5"
-MODEL_TRAINING_CUTOFF = date(2026, 6, 30)  # conservative end of "Jun 2026"
+# Training-data cutoffs, rounded up to the end of the stated month. Documents after a model's cutoff are
+# evidence; before it, results are an upper bound (the model may remember what happened next).
+MODEL_CUTOFFS = {
+    # Gemma 4 Technical Report (arXiv 2607.02770): pre-training data "with a cutoff date of January 2025".
+    # Post-training data may be later and is not dated.
+    "gemma-4-e4b-it": date(2025, 1, 31),
+    "claude-haiku-5-5": date(2026, 6, 30),
+    "claude-opus-5-5": date(2026, 6, 30),
+}
+DEFAULT_LLM_BASE_URL = "http://localhost:1234/v1"  # LM Studio's server; Ollama is http://localhost:11434/v1
 
 # --- Data -----------------------------------------------------------------------------------------
 HISTORY_START = date(2016, 1, 1)  # Alpaca's historical bars start in 2016
@@ -84,6 +95,10 @@ def require_env(name):
     if not value:
         raise RuntimeError(f"{name} is not set; add it to .env and run with `uv run --env-file .env`")
     return value
+
+
+def llm_base_url():
+    return (os.environ.get("LLM_BASE_URL", "").strip() or DEFAULT_LLM_BASE_URL).rstrip("/")
 
 
 def alpaca_credentials():

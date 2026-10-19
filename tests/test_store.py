@@ -83,3 +83,12 @@ def test_upsert_refuses_rows_without_a_usable_available_at(tmp_path, bad):
     with pytest.raises(ValueError, match="available_at"):
         store.upsert("t", bad, key=["id"], partition="part", root=tmp_path)
     assert store.as_of("t", BASE, root=tmp_path).empty
+
+
+def test_keys_lists_distinct_key_tuples_across_partitions(tmp_path):
+    df = _rows([1, 2, 1], [0, 1, 2], text=["x", "y", "z"])
+    df["part"], df["model"] = ["a", "b", "b"], ["m1", "m1", "m2"]
+    store.upsert("t", df, key=["id", "model"], partition="part", root=tmp_path)
+
+    assert store.keys("t", ["id", "model"], root=tmp_path) == {(1, "m1"), (2, "m1"), (1, "m2")}
+    assert store.keys("missing", ["id"], root=tmp_path) == set()

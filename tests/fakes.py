@@ -13,6 +13,14 @@ def response(status, payload=None, text=None):
     return r
 
 
+def completion(content, input_tokens=100, output_tokens=20):
+    """An OpenAI-style chat completion, as LM Studio, Ollama and llama.cpp return it."""
+    return response(200, {
+        "choices": [{"message": {"role": "assistant", "content": content}, "finish_reason": "stop"}],
+        "usage": {"prompt_tokens": input_tokens, "completion_tokens": output_tokens},
+    })  # fmt: skip
+
+
 class FakeSession:
     """Serves queued responses per URL (the last one repeats) and records every request."""
 
@@ -22,6 +30,13 @@ class FakeSession:
 
     def get(self, url, params=None, headers=None, timeout=None):
         self.calls.append({"url": url, "params": dict(params or {}), "headers": dict(headers or {})})
+        return self._next(url)
+
+    def post(self, url, json=None, headers=None, timeout=None):
+        self.calls.append({"url": url, "json": json, "headers": dict(headers or {})})
+        return self._next(url)
+
+    def _next(self, url):
         queue = self.routes[url]
         return queue.pop(0) if len(queue) > 1 else queue[0]
 

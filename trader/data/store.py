@@ -71,6 +71,18 @@ def list_items(table, column, root=None):
         return {item for (item,) in rows.fetchall()}
 
 
+def keys(table, columns, root=None):
+    """Distinct tuples of `columns` across all partitions, e.g. which documents a model has already tagged."""
+    folder = Path(root or config.DATA_DIR) / table
+    if not any(folder.glob("*.parquet")):
+        return set()
+    cols = ", ".join(f'"{c}"' for c in columns)
+    with duckdb.connect() as con:
+        return set(
+            con.execute(f"SELECT DISTINCT {cols} FROM read_parquet(?)", [str(folder / "*.parquet")]).fetchall()
+        )
+
+
 def as_of(table, ts, root=None):
     """All rows of `table` with available_at <= ts. ts must be timezone-aware: a naive time is ambiguous by
     hours, which is exactly the size of the leaks this guards against."""

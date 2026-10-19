@@ -35,3 +35,14 @@ def test_alpaca_credentials_refuses_anything_live(monkeypatch, overrides):
     _paper_env(monkeypatch, **overrides)
     with pytest.raises(RuntimeError, match="paper"):
         config.alpaca_credentials()
+
+
+def test_every_pinned_model_has_a_training_cutoff():
+    assert {config.TAGGER_MODEL, config.REVIEW_MODEL} <= set(config.MODEL_CUTOFFS)
+
+
+def test_llm_base_url_defaults_to_lm_studio_on_localhost(monkeypatch):
+    monkeypatch.delenv("LLM_BASE_URL", raising=False)
+    assert config.llm_base_url() == "http://localhost:1234/v1"
+    monkeypatch.setenv("LLM_BASE_URL", "http://172.17.144.1:1234/v1/")
+    assert config.llm_base_url() == "http://172.17.144.1:1234/v1"
