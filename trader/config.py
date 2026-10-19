@@ -65,16 +65,17 @@ class RiskLimits:
 RISK = RiskLimits()
 
 # --- Models (§4.2): pinned snapshots; changing one starts a new evaluation ----------------------
-# The tagger runs on a local OpenAI-compatible server first (LM Studio by default; Ollama and llama.cpp
+# The tagger runs on a local OpenAI-compatible server first (llama.cpp's `llama serve`, LM Studio and Ollama
 # speak the same API), before paying for a hosted model. The ID is what the server's /v1/models lists.
-TAGGER_MODEL = "gemma-4-e4b-it"  # lmstudio-community/gemma-4-E4B-it-GGUF, Q4_K_M
+TAGGER_MODEL = "unsloth/gemma-4-E4B-it-GGUF:Q4_K_M"  # `llama serve -hf <this ID>`
 REVIEW_MODEL = "claude-opus-5-5"
 # Training-data cutoffs, rounded up to the end of the stated month. Documents after a model's cutoff are
 # evidence; before it, results are an upper bound (the model may remember what happened next).
 MODEL_CUTOFFS = {
     # Gemma 4 Technical Report (arXiv 2607.02770): pre-training data "with a cutoff date of January 2025".
     # Post-training data may be later and is not dated.
-    "gemma-4-e4b-it": date(2025, 1, 31),
+    "unsloth/gemma-4-E4B-it-GGUF:Q4_K_M": date(2025, 1, 31),
+    "gemma-4-e4b-it": date(2025, 1, 31),  # the same weights as LM Studio names them
     "claude-haiku-5-5": date(2026, 6, 30),
     "claude-opus-5-5": date(2026, 6, 30),
 }

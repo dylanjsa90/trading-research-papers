@@ -99,30 +99,27 @@ flagged `accepted_source = json-latest`.
 
 ### Local LLM (Phase 2)
 
-The tagger runs on a local OpenAI-compatible server before any hosted model is paid for. The default is LM
-Studio with `gemma-4-e4b-it` (Q4_K_M, 5.3 GB). Its pre-training data ends in January 2025, so news from
-February 2025 on counts as post-cutoff evidence: about 21 months, against about 4 for Claude 5.5. Ollama
-(`http://localhost:11434/v1`) and llama.cpp's server speak the same API; set `LLM_BASE_URL` to use them. A
-model's ID must match `config.TAGGER_MODEL` and must have a cutoff in `config.MODEL_CUTOFFS`, or the run is
-refused.
-
-WSL can't reach a server listening on Windows' `localhost` by default. Pick one:
-
-- **Mirrored networking (recommended).** Add `networkingMode=mirrored` under `[wsl2]` in
-  `C:\Users\<you>\.wslconfig`, then run `wsl --shutdown` from Windows. `localhost:1234` then works from WSL.
-- **Serve on the local network.** In LM Studio, turn on Developer → Server Settings → "Serve on Local
-  Network". Then set `LLM_BASE_URL=http://<windows-host-ip>:1234/v1`, where the IP is the default gateway
-  shown by `ip route` in WSL. That IP can change after a reboot, and the server is visible to your LAN.
-
-Then load the model with enough context for the papers (about 8k tokens each), start the server, and check:
+The tagger runs on a local OpenAI-compatible server before any hosted model is paid for. The default is
+llama.cpp's `llama serve` (as installed with Unsloth) inside WSL, serving Unsloth's GGUF of Gemma 4 E4B
+(`unsloth/gemma-4-E4B-it-GGUF:Q4_K_M`, 5 GB, CPU). Its pre-training data ends in January 2025, so news from
+February 2025 on counts as post-cutoff evidence: about 21 months, against about 4 for Claude 5.5. The server's
+model ID must equal `config.TAGGER_MODEL` and have a cutoff in `config.MODEL_CUTOFFS`, or the run is refused.
 
 ```bash
-lms load gemma-4-e4b-it --context-length 16384    # in Windows; or load it from LM Studio's UI
-lms server start
+llama serve -hf unsloth/gemma-4-E4B-it-GGUF:Q4_K_M -c 16384 -np 1 --port 9931   # papers need ~8k tokens
+# .env: LLM_BASE_URL=http://localhost:9931/v1
 uv run --env-file .env python -m trader.llm check     # pinned model served + valid JSON on a sample
 uv run --env-file .env python -m trader.llm papers    # shakedown -> docs/research/corpus-llm-papers.csv
 uv run --env-file .env python -m trader.llm news      # tags stored news after the cutoff; --since for more
 ```
+
+Pick a model that fits in memory. WSL has 15 GB of RAM and no GPU access (the GPU is AMD). A 29 GB Q8_0 27B
+model pages from disk at well under one token a second and starves the whole machine.
+
+For GPU speed, serve from Windows instead: LM Studio, or a Vulkan build of llama.cpp. WSL can't reach a server
+listening on Windows' `localhost` by default. Either add `networkingMode=mirrored` under `[wsl2]` in
+`C:\Users\<you>\.wslconfig` and run `wsl --shutdown`, or let the server listen on the local network and
+point `LLM_BASE_URL` at the WSL default gateway (`ip route`).
 
 Invalid output gets up to two repair turns that quote the validation error, then is quarantined in
 `data/<table>_quarantine/`. Delete a quarantine file to retry those documents. Server errors abort the run

@@ -32,6 +32,8 @@ def chat_json(messages, schema, name, model, max_tokens, session=None, base_url=
     url = f"{_base(base_url)}/chat/completions"
     body = {
         "model": model, "messages": messages, "temperature": 0, "max_tokens": max_tokens,
+        # Thinking burns the token budget before any JSON appears (llama.cpp turns it on for Gemma 4).
+        "chat_template_kwargs": {"enable_thinking": False},
         "response_format": {"type": "json_schema", "json_schema": {"name": name, "strict": True, "schema": schema}},
     }  # fmt: skip
     session = session or requests.Session()

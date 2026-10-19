@@ -27,6 +27,7 @@ def test_chat_json_sends_the_schema_at_temperature_zero_and_returns_text_and_usa
     assert (text, usage) == ('{"a": 1}', {"input_tokens": 120, "output_tokens": 30})
     body = session.calls[0]["json"]
     assert (body["model"], body["messages"], body["temperature"], body["max_tokens"]) == ("m", MESSAGES, 0, 50)
+    assert body["chat_template_kwargs"] == {"enable_thinking": False}  # extraction gains nothing from thinking
     assert body["response_format"] == {
         "type": "json_schema", "json_schema": {"name": "record", "strict": True, "schema": {"type": "object"}}}  # fmt: skip
 

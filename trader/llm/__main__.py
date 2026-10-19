@@ -60,7 +60,7 @@ def main(argv):
         if args.command == "check":
             result = check()
         elif args.command == "papers":
-            result = corpus.run(workers=args.workers)
+            result = corpus.run(workers=args.workers, flush_every=5)  # papers take ~1 min each on CPU
         else:
             result = news(args.since, args.anonymised, args.workers)
     except requests.ConnectionError:
