@@ -65,3 +65,4 @@ def test_llm_features_decay_sentiment_and_flag_fresh_negative_surprises():
     assert list(f["negative"]["AAA"]) == [False, False, False, True, True, False]
     assert (f["sentiment"]["BBB"] == 0).all() and not f["negative"]["BBB"].any()
     assert not f["negative"]["CCC"].any()  # very negative but unsurprising: not an event
+    assert f["count"]["AAA"].sum() == 2 and f["count"]["CCC"].sum() == 1

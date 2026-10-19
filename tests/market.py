@@ -30,4 +30,4 @@ def tags(rows):
     """Tag rows from (doc_id, symbols, sentiment, surprise, available_at, n_tickers) tuples."""
     df = pd.DataFrame(rows, columns=["doc_id", "symbols", "sentiment", "surprise", "available_at", "n_tickers"])
     df["available_at"] = pd.to_datetime(df["available_at"], utc=True)
-    return df.assign(event_type="other")
+    return df.assign(event_type="other", seconds=1.0)

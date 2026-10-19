@@ -57,7 +57,7 @@ def _daily(events, sessions, symbols, values, aggfunc):
 
 def llm_features(events, sessions, symbols, overlay=config.OVERLAY):
     """Per session x symbol: exponentially decayed mean sentiment (shrunk toward 0 by a neutral prior), a fresh
-    negative-event flag, and the count of fresh high-surprise tags."""
+    negative-event flag, the count of fresh high-surprise tags, and the tags dated to each session."""
     sessions = pd.DatetimeIndex(sessions)
     total = _daily(events, sessions, symbols, "sentiment", "sum").to_numpy()
     count = _daily(events, sessions, symbols, "sentiment", "count").to_numpy()
@@ -77,4 +77,5 @@ def llm_features(events, sessions, symbols, overlay=config.OVERLAY):
         "sentiment": pd.DataFrame(num / (den + overlay.prior_weight), index=sessions, columns=symbols),
         "negative": fresh(negative) > 0,
         "high_surprise": fresh(events[events["surprise"] == "high"]),
+        "count": pd.DataFrame(count, index=sessions, columns=symbols),  # tags per session, for coverage
     }
