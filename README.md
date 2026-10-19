@@ -101,9 +101,10 @@ flagged `accepted_source = json-latest`.
 
 The tagger runs on a local OpenAI-compatible server before any hosted model is paid for. The default is
 llama.cpp's `llama serve` (as installed with Unsloth) inside WSL, serving Unsloth's GGUF of Gemma 4 E4B
-(`unsloth/gemma-4-E4B-it-GGUF:Q4_K_M`, 5 GB, CPU). Its pre-training data ends in January 2025, so news from
-February 2025 on counts as post-cutoff evidence: about 21 months, against about 4 for Claude 5.5. The server's
-model ID must equal `config.TAGGER_MODEL` and have a cutoff in `config.MODEL_CUTOFFS`, or the run is refused.
+(`unsloth/gemma-4-E4B-it-GGUF:Q4_K_M`, 5 GB) on the GPU through ROCm. Its pre-training data ends in January
+2025, so news from February 2025 on counts as post-cutoff evidence: about 21 months, against about 4 for
+Claude 5.5. The server's model ID must equal `config.TAGGER_MODEL` and have a cutoff in
+`config.MODEL_CUTOFFS`, or the run is refused.
 
 ```bash
 llama serve -hf unsloth/gemma-4-E4B-it-GGUF:Q4_K_M -c 16384 -np 1 --cache-ram 0 --no-mmproj --port 9931
@@ -115,20 +116,27 @@ uv run --env-file .env python -m trader.llm news      # tags stored news after t
 
 `-c 16384` fits the papers (about 8k tokens each). `--cache-ram 0` turns off llama.cpp's RAM cache of past
 prompts, 8 GB by default, which grew until the machine swapped. `--no-mmproj` skips the image and audio
-encoders. The server then uses about 7 GB.
+encoders. The server then uses about 2.6 GB of RAM on the GPU, or about 7 GB on CPU.
 
-Pick a model that fits in memory. WSL has 15 GB of RAM and no GPU access (the GPU is AMD). A 29 GB Q8_0 27B
-model pages from disk at well under one token a second and starves the whole machine.
+**GPU (AMD, inside WSL).** Install ROCm for WSL (AMD's "Use ROCm on Radeon" guide; the RX 9070 XT is
+supported) and check with `rocminfo | grep gfx1201`. Then run `llama update`: it detects ROCm and installs a
+ROCm build. `llama serve --list-devices` should list `ROCm0`. Measured on an RX 9070 XT with Gemma 4 E4B:
 
-For GPU speed, serve from Windows instead: LM Studio, or a Vulkan build of llama.cpp. WSL can't reach a server
-listening on Windows' `localhost` by default. Either add `networkingMode=mirrored` under `[wsl2]` in
-`C:\Users\<you>\.wslconfig` and run `wsl --shutdown`, or let the server listen on the local network and
-point `LLM_BASE_URL` at the WSL default gateway (`ip route`).
+| | CPU (8-core Zen 5) | GPU (ROCm) |
+| --- | --- | --- |
+| Prompt processing | ~120 tokens/s | ~4,300 tokens/s |
+| Generation | ~15 tokens/s | ~90 tokens/s |
+| One paper (~4.5k tokens in) | ~43 s | ~3 s |
+| One news item (~330 tokens in) | ~5 s | ~1.5 s |
 
-`docs/research/corpus-llm-papers.csv` is the shakedown's output: 65 papers on CPU, all schema-valid on the
-first attempt, ~40 s each. It is machine-extracted and unverified. A spot check found right test windows
-(TradingAgents, FinMem, Trading-R1) but wrong `evaluated_models` for RL papers (algorithms, not language
-models) and some guessed cutoff answers, so check a row against its paper before citing it.
+Pick a model that fits: 16 GB of VRAM and 15 GB of WSL RAM. A 29 GB Q8_0 27B model pages from disk at well
+under one token a second and starves the whole machine.
+
+`docs/research/corpus-llm-papers.csv` is the shakedown's output: 65 papers, all schema-valid on the first
+attempt (run on CPU before ROCm, ~40 s each). It is machine-extracted and unverified. A spot check found
+right test windows (TradingAgents, FinMem, Trading-R1) but wrong `evaluated_models` for RL papers
+(algorithms, not language models) and some guessed cutoff answers, so check a row against its paper before
+citing it.
 
 Invalid output gets up to two repair turns that quote the validation error, then is quarantined in
 `data/<table>_quarantine/`. Delete a quarantine file to retry those documents. Server errors abort the run
