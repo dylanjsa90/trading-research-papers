@@ -70,6 +70,7 @@ Built phase by phase from the [build plan](docs/plans/llm-trading-build-plan.md)
   features read only through `trader.data.store.as_of(table, t)`, which never returns a later row.
 - **Phase 2:** a local LLM tags documents into schema-validated records (`trader/llm/`). It is cached by
   `(doc_id, model, prompt_version)` and labelled pre- or post-cutoff; there is also an anonymised arm.
+- **Phase 3:** features, signals, a daily backtester and the ablation ladder with a built-in look-ahead check.
 
 ```bash
 uv run pytest                                                  # offline test suite
@@ -96,6 +97,37 @@ offset. For the rest (NFLX, GE, TSLA, …) it is true UTC. This was checked on 2
 filings' index pages. Each filing's SGML header gives the true time (US/Eastern), so `filings.py` fetches
 it once per new filing. If the header is missing, it falls back to the later of the two JSON readings,
 flagged `accepted_source = json-latest`.
+
+### Strategy and backtest (Phase 3)
+
+`trader/strategy/` turns point-in-time data into target weights, `trader/backtest.py` simulates them, and
+`trader/ablation.py` runs the ablation ladder (§8.2):
+
+```bash
+uv run python -m trader.ablation                       # tables -> data/backtest/{ablation,walk_forward}.csv
+uv run python -m trader.ablation --as-of 2026-10-19T14:59:49Z   # rerun a past snapshot exactly
+```
+
+- **Timing.** Decisions use data available at the 16:00 close and fill at the next open. Costs are 7.5 bps
+  per side: 0.5 commission, 2 half-spread, 5 slippage (`config.Costs`).
+- **Core.** The SPY 200-day regime filter, a 200-day trend filter and $5 / $50M liquidity floors, the top 10
+  names by 6-1 momentum, inverse-vol weights scaled toward 15% vol with a 10% cap per name. It re-ranks every 21
+  sessions; regime exits apply daily.
+- **LLM overlay.** Tags count from the first close at or after their `available_at`. Roundups (six or more
+  tagged tickers) are ignored. A fresh negative, surprising tag sends the name to cash; a decayed-mean sentiment
+  tilts weights at constant gross. The overlay never adds a name.
+- **Arms and benchmarks.** Price-only, +LLM and +LLM-anonymised, against SPY buy-and-hold, equal-weight
+  buy-and-hold and a SPY trend filter, all through the same engine and costs. Columns are pre- and post-cutoff
+  of the tagger's training data, plus a per-year walk-forward table. Parameters are fixed in `config` and
+  never fitted.
+- **Look-ahead check.** Every run multiplies prices after a pre-cutoff rebalance by 50 and plants a -1
+  high-surprise tag on every name. Any feature or decision up to that close that changes raises
+  `LookAheadError`.
+- **Multiple testing.** Every configuration run goes to `data/backtest_runs.jsonl`, and the count of distinct
+  configurations is printed with the results. Try new parameters on pre-cutoff data only.
+
+Caveat: the universe is today's large caps, so every pre-2026 result, the equal-weight benchmark included, is
+biased upward by survivorship (§4.2).
 
 ### Local LLM (Phase 2)
 
