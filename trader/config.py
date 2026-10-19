@@ -75,6 +75,7 @@ MODEL_CUTOFFS = {
     # Gemma 4 Technical Report (arXiv 2607.02770): pre-training data "with a cutoff date of January 2025".
     # Post-training data may be later and is not dated.
     "unsloth/gemma-4-E4B-it-GGUF:Q4_K_M": date(2025, 1, 31),
+    "unsloth/gemma-4-12b-it-GGUF:Q4_K_M": date(2025, 1, 31),  # same report and dataset as E4B
     "gemma-4-e4b-it": date(2025, 1, 31),  # the same weights as LM Studio names them
     "claude-haiku-5-5": date(2026, 6, 30),
     "claude-opus-5-5": date(2026, 6, 30),
