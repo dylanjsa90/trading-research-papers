@@ -5,3 +5,5 @@ papers/
 .python-version
 .browser-profile/
 __pycache__/
+/data/
+.superpowers/

@@ -33,7 +33,10 @@ main.py                    Placeholder entry point (unused)
 docs/research/             Research notes drawing on the corpus (cited)
 docs/plans/                Build plans for systems based on that research
 papers/                    PDFs + manifest.json / manifest.csv (git-ignored, ~1.1 GB)
-.env                       UNPAYWALL_EMAIL=… for the Unpaywall API (not committed)
+trader/                    The LLM-assisted trading system (see "Trading system" below)
+tests/                     pytest suite for trader/ (offline; no keys needed)
+data/                      trader/'s point-in-time parquet store (git-ignored)
+.env                       Keys and contact emails (not committed; see Setup)
 ```
 
 The research note [What it takes to build LLM-based algorithmic trading](docs/research/llm-algo-trading.md)
@@ -51,6 +54,45 @@ uv run playwright install chromium       # browser for step 2
 
 Set `UNPAYWALL_EMAIL` in `.env`. Unpaywall finds many more open-access copies and requires
 a contact email. Scripts don't read `.env` themselves, so pass it to uv with `--env-file`.
+
+The trading system also reads `APCA_API_KEY_ID`, `APCA_API_SECRET_KEY` and `APCA_API_BASE_URL`
+(Alpaca **paper** account only; anything else is refused), `ANTHROPIC_API_KEY` (from Phase 2), and
+`SEC_USER_AGENT` (`"Name email"`, which EDGAR requires).
+
+## Trading system (`trader/`)
+
+Built phase by phase from the [build plan](docs/plans/llm-trading-build-plan.md). Done so far:
+
+- **Phase 0:** `trader/config.py` holds the frozen 50-name universe (SPY is the regime reference), the
+  price-only core strategy, hard risk limits, pinned model IDs and the Jun 2026 training cutoff.
+- **Phase 1:** point-in-time data in `data/<table>/*.parquet`. Every row has an `available_at` (UTC), and
+  features read only through `trader.data.store.as_of(table, t)`, which never returns a later row.
+
+```bash
+uv run pytest                                                  # offline test suite
+uv run --env-file .env python -m trader.data filings           # EDGAR 8-K/10-Q/10-K since 2016
+uv run --env-file .env python -m trader.data prices            # Alpaca daily bars (needs Alpaca keys)
+uv run --env-file .env python -m trader.data news              # Alpaca/Benzinga news (needs Alpaca keys)
+uv run --env-file .env python -m trader.data count-news 2026-10-15   # sanity check: ~130+/day expected
+```
+
+Every refresh is incremental and can be re-run safely. Re-runs add nothing new, and an interrupted news
+backfill resumes from the newest stored article.
+
+Timestamp sources (`available_at`):
+
+| Table     | `available_at`                                      | Note                                                                    |
+| --------- | --------------------------------------------------- | ----------------------------------------------------------------------- |
+| `prices`  | 16:00 New York on the session date                  | Bars are split- and dividend-adjusted; history re-fetched when restated |
+| `news`    | Benzinga `created_at`                               | Edited articles keep `created_at` but store the latest text             |
+| `filings` | EDGAR acceptance time from the filing's `.hdr.sgml` | See below                                                               |
+
+**EDGAR's JSON acceptance time is unreliable.** In `data.sec.gov/submissions`, `acceptanceDateTime` ends
+in `Z`, but for about two thirds of the universe (AAPL, MSFT, …) the value is UTC *plus* the Eastern
+offset. For the rest (NFLX, GE, TSLA, …) it is true UTC. This was checked on 2026-10-19 against the
+filings' index pages. Each filing's SGML header gives the true time (US/Eastern), so `filings.py` fetches
+it once per new filing. If the header is missing, it falls back to the later of the two JSON readings,
+flagged `accepted_source = json-latest`.
 
 ## Pipeline
 
