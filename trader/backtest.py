@@ -49,11 +49,12 @@ def simulate(p, decide, sessions, costs=config.COSTS, rebalance_every=config.COR
         target = held if target is None else target.reindex(shares.index, fill_value=0.0)
         keep = (target - held).abs() < 1e-12
         new = (target * nav_open / price).where(~keep, shares).fillna(0.0)
-        traded = ((new - shares).abs() * price).fillna(0.0).sum()
+        changed = (new - shares).abs()
+        traded = (changed * price).fillna(0.0).sum()
         cost = traded * costs.one_way_bps / 1e4
         cash = nav_open - _value(new, price, fill).sum() - cost
+        turnover[fill], paid[fill], trades[fill] = traded / nav_open, cost, int((changed > 0).sum())
         shares = new
-        turnover[fill], paid[fill], trades[fill] = traded / nav_open, cost, int(((new - shares).abs() > 0).sum())
     return Result(pd.Series(nav), pd.DataFrame(weights).T, targets, pd.Series(turnover, dtype=float),
                   pd.Series(paid, dtype=float), pd.Series(trades, dtype=int))  # fmt: skip
 
