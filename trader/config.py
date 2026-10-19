@@ -41,6 +41,7 @@ class CoreStrategy:
     vol_window: int = 60  # inverse-volatility weights from 60-day realised vol
     target_vol: float = 0.15  # scale the book toward 15% annualised vol, never above RISK.max_gross
     regime_window: int = 200  # hold cash while SPY closes below its 200-day SMA
+    rebalance_every: int = 21  # sessions between re-rankings; exits (regime, negative news) apply daily
 
 
 CORE = CoreStrategy()
@@ -63,6 +64,38 @@ class RiskLimits:
 
 
 RISK = RiskLimits()
+
+
+# --- Backtest (§8.2) ------------------------------------------------------------------------------
+@dataclass(frozen=True)
+class Costs:
+    """Per side, in basis points of traded notional, for market-on-open fills in mega caps."""
+
+    commission_bps: float = 0.5  # Alpaca charges no commission on US equities; modelled anyway (§8.2)
+    half_spread_bps: float = 2.0
+    slippage_bps: float = 5.0
+
+    @property
+    def one_way_bps(self):
+        return self.commission_bps + self.half_spread_bps + self.slippage_bps
+
+
+COSTS = Costs()
+
+
+@dataclass(frozen=True)
+class LlmOverlay:
+    """How tags become features (§3.3: a risk filter first, a tilt second). Fixed a priori, never fitted."""
+
+    half_life: float = 5.0  # sessions; sentiment is an exponentially decayed mean...
+    prior_weight: float = 1.0  # ...shrunk toward 0 as if one neutral article were always present
+    roundup_tickers: int = 6  # articles tagged with this many tickers are wraps or movers lists: ignored
+    negative_sentiment: float = -0.5  # a fresh tag at or below this, with med/high surprise, is a negative event
+    negative_window: int = 3  # sessions a negative event stays fresh
+    tilt: float = 0.5  # weight multiplier 1 + tilt * sentiment
+
+
+OVERLAY = LlmOverlay()
 
 # --- Models (§4.2): pinned snapshots; changing one starts a new evaluation ----------------------
 # The tagger runs on a local OpenAI-compatible server first (llama.cpp's `llama serve`, LM Studio and Ollama

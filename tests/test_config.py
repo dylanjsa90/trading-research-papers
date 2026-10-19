@@ -46,3 +46,7 @@ def test_llm_base_url_defaults_to_lm_studio_on_localhost(monkeypatch):
     assert config.llm_base_url() == "http://localhost:1234/v1"
     monkeypatch.setenv("LLM_BASE_URL", "http://172.17.144.1:1234/v1/")
     assert config.llm_base_url() == "http://172.17.144.1:1234/v1"
+
+
+def test_costs_add_up_to_one_way_basis_points():
+    assert config.Costs(commission_bps=0.5, half_spread_bps=2, slippage_bps=5).one_way_bps == 7.5
