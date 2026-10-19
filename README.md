@@ -56,17 +56,20 @@ Set `UNPAYWALL_EMAIL` in `.env`. Unpaywall finds many more open-access copies an
 a contact email. Scripts don't read `.env` themselves, so pass it to uv with `--env-file`.
 
 The trading system also reads `APCA_API_KEY_ID`, `APCA_API_SECRET_KEY` and `APCA_API_BASE_URL`
-(Alpaca **paper** account only; anything else is refused), `ANTHROPIC_API_KEY` (from Phase 2), and
-`SEC_USER_AGENT` (`"Name email"`, which EDGAR requires).
+(Alpaca **paper** account only; anything else is refused), `SEC_USER_AGENT` (`"Name email"`, which
+EDGAR requires), and optionally `LLM_BASE_URL` (the local model server; default `http://localhost:1234/v1`).
+`ANTHROPIC_API_KEY` is only needed if the tagger moves to a hosted model, or for the Phase 4 reviewer.
 
 ## Trading system (`trader/`)
 
 Built phase by phase from the [build plan](docs/plans/llm-trading-build-plan.md). Done so far:
 
 - **Phase 0:** `trader/config.py` holds the frozen 50-name universe (SPY is the regime reference), the
-  price-only core strategy, hard risk limits, pinned model IDs and the Jun 2026 training cutoff.
+  price-only core strategy, hard risk limits, pinned model IDs and their training cutoffs.
 - **Phase 1:** point-in-time data in `data/<table>/*.parquet`. Every row has an `available_at` (UTC), and
   features read only through `trader.data.store.as_of(table, t)`, which never returns a later row.
+- **Phase 2:** a local LLM tags documents into schema-validated records (`trader/llm/`). It is cached by
+  `(doc_id, model, prompt_version)` and labelled pre- or post-cutoff; there is also an anonymised arm.
 
 ```bash
 uv run pytest                                                  # offline test suite
@@ -93,6 +96,38 @@ offset. For the rest (NFLX, GE, TSLA, …) it is true UTC. This was checked on 2
 filings' index pages. Each filing's SGML header gives the true time (US/Eastern), so `filings.py` fetches
 it once per new filing. If the header is missing, it falls back to the later of the two JSON readings,
 flagged `accepted_source = json-latest`.
+
+### Local LLM (Phase 2)
+
+The tagger runs on a local OpenAI-compatible server before any hosted model is paid for. The default is LM
+Studio with `gemma-4-e4b-it` (Q4_K_M, 5.3 GB). Its pre-training data ends in January 2025, so news from
+February 2025 on counts as post-cutoff evidence: about 21 months, against about 4 for Claude 5.5. Ollama
+(`http://localhost:11434/v1`) and llama.cpp's server speak the same API; set `LLM_BASE_URL` to use them. A
+model's ID must match `config.TAGGER_MODEL` and must have a cutoff in `config.MODEL_CUTOFFS`, or the run is
+refused.
+
+WSL can't reach a server listening on Windows' `localhost` by default. Pick one:
+
+- **Mirrored networking (recommended).** Add `networkingMode=mirrored` under `[wsl2]` in
+  `C:\Users\<you>\.wslconfig`, then run `wsl --shutdown` from Windows. `localhost:1234` then works from WSL.
+- **Serve on the local network.** In LM Studio, turn on Developer → Server Settings → "Serve on Local
+  Network". Then set `LLM_BASE_URL=http://<windows-host-ip>:1234/v1`, where the IP is the default gateway
+  shown by `ip route` in WSL. That IP can change after a reboot, and the server is visible to your LAN.
+
+Then load the model with enough context for the papers (about 8k tokens each), start the server, and check:
+
+```bash
+lms load gemma-4-e4b-it --context-length 16384    # in Windows; or load it from LM Studio's UI
+lms server start
+uv run --env-file .env python -m trader.llm check     # pinned model served + valid JSON on a sample
+uv run --env-file .env python -m trader.llm papers    # shakedown -> docs/research/corpus-llm-papers.csv
+uv run --env-file .env python -m trader.llm news      # tags stored news after the cutoff; --since for more
+```
+
+Invalid output gets up to two repair turns that quote the validation error, then is quarantined in
+`data/<table>_quarantine/`. Delete a quarantine file to retry those documents. Server errors abort the run
+and keep what finished. Every run appends tokens and seconds per 1,000 documents to `data/llm_runs.jsonl`.
+`--workers N` sends N requests at once, which helps only if the server is set to serve requests in parallel.
 
 ## Pipeline
 
