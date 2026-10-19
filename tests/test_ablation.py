@@ -81,3 +81,21 @@ def test_news_dated_one_session_early_fails_loudly(tmp_path):
         _run(
             tmp_path, _tags([("news-1", ["AAA"], 0.6, "low", market.close_time(SESSIONS[100]), 1)]), prepare=early
         )
+
+
+def test_load_with_a_snapshot_ignores_tags_written_after_it(tmp_path):
+    from trader.data import store
+
+    rows = market.prices(days=3, symbols=("AAA",))
+    store.upsert("prices", rows, key=["symbol", "date"], partition="symbol", root=tmp_path)
+    news = pd.DataFrame({"id": [1, 2], "symbols": [["AAA"], ["AAA", "BBB"]], "month": "2024-01",
+                         "available_at": pd.Timestamp("2024-01-02 15:00", tz="UTC")})  # fmt: skip
+    store.upsert("news", news, key=["id"], partition="month", root=tmp_path)
+    tags = _tags([("news-1", ["AAA"], 0.5, "low", "2024-01-02 15:00", 1), ("news-2", ["AAA"], 0.1, "low",
+                  "2024-01-02 15:00", 2)]).drop(columns="n_tickers")  # fmt: skip
+    tags["tagged_at"] = pd.to_datetime(["2026-10-19 10:00", "2026-10-19 12:00"], utc=True)
+    store.upsert("tags", tags.assign(month="2024-01"), key=["doc_id"], partition="month", root=tmp_path)
+
+    _, got = ablation.load(root=tmp_path, snapshot="2026-10-19 11:00Z")
+
+    assert list(got["doc_id"]) == ["news-1"] and list(got["n_tickers"]) == [1]

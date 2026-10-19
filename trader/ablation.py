@@ -6,9 +6,10 @@ run is checked for look-ahead by planting an absurd future and requiring every f
 rebalance before the cutoff to be unchanged; a leak raises LookAheadError. Every configuration run is logged
 to backtest_runs.jsonl, so the number tried is reported beside the results (§8.2.8).
 
-    uv run python -m trader.ablation          # needs data/prices, data/tags and data/news
+    uv run python -m trader.ablation [--as-of ISO-TIME]   # needs data/prices, data/tags and data/news
 """
 
+import argparse
 import hashlib
 import json
 import sys
@@ -210,20 +211,27 @@ def run(prices, tags, arms=ARMS, settings=DEFAULTS, cutoff=None, root=None, prep
     return Report(frame(rows), frame(yearly), tried, notes, results)
 
 
-def load(root=None, now=None):
-    """Prices, and tags joined with each article's publisher ticker count, as stored now."""
-    now = pd.Timestamp(now or pd.Timestamp.now(tz="UTC"))
-    prices = store.as_of("prices", now, root=root)
+def load(root=None, snapshot=None):
+    """Prices, and tags joined with each article's publisher ticker count, as stored at `snapshot` (default
+    now). Tags written after the snapshot are left out, so a run reproduces exactly while tagging continues."""
+    snapshot = pd.Timestamp(snapshot or pd.Timestamp.now(tz="UTC"))
+    prices = store.as_of("prices", snapshot, root=root)
     cols = ["doc_id", "model", "prompt_version", "symbols", "sentiment", "surprise", "event_type", "seconds",
-            "available_at"]  # fmt: skip
-    tags = store.as_of("tags", now, root=root, columns=cols)
-    news = store.as_of("news", now, root=root, columns=["id", "symbols"])
+            "tagged_at", "available_at"]  # fmt: skip
+    tags = store.as_of("tags", snapshot, root=root, columns=cols)
+    tags = tags[tags["tagged_at"] <= snapshot].drop(columns="tagged_at")
+    news = store.as_of("news", snapshot, root=root, columns=["id", "symbols"])
     counts = pd.DataFrame({"doc_id": "news-" + news["id"].astype(str), "n_tickers": news["symbols"].map(len)})
-    return prices, tags.merge(counts, on="doc_id", how="left").fillna({"n_tickers": 1})
+    return prices, tags.merge(counts, on="doc_id", how="left").fillna({"n_tickers": 1}).reset_index(drop=True)
 
 
-def main():
-    report = run(*load())
+def main(argv):
+    parser = argparse.ArgumentParser(prog="python -m trader.ablation", description=__doc__,
+                                     formatter_class=argparse.RawDescriptionHelpFormatter)  # fmt: skip
+    parser.add_argument("--as-of", help="data snapshot (ISO time, UTC); rerun with the same value to reproduce")
+    snapshot = pd.Timestamp(parser.parse_args(argv).as_of or pd.Timestamp.now(tz="UTC"))
+    snapshot = snapshot if snapshot.tzinfo else snapshot.tz_localize("UTC")
+    report = run(*load(snapshot=snapshot))
     out = config.DATA_DIR / "backtest"
     out.mkdir(parents=True, exist_ok=True)
     report.table.to_csv(out / "ablation.csv")
@@ -232,8 +240,9 @@ def main():
         for period in report.table.columns.get_level_values(0).unique():
             print(f"\n{period}\n{report.table[period]}")
     print(f"\nnotes: {report.notes}\nconfigurations tried so far: {report.configs_tried}\nwritten to {out}")
+    print(f"reproduce with: python -m trader.ablation --as-of {snapshot.isoformat()}")
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(sys.argv[1:]))
