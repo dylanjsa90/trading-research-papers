@@ -92,3 +92,9 @@ def test_keys_lists_distinct_key_tuples_across_partitions(tmp_path):
 
     assert store.keys("t", ["id", "model"], root=tmp_path) == {(1, "m1"), (2, "m1"), (1, "m2")}
     assert store.keys("missing", ["id"], root=tmp_path) == set()
+
+
+def test_as_of_can_read_only_some_columns(tmp_path):
+    store.upsert("t", _rows([1, 2], [0, 5]), key=["id"], partition="part", root=tmp_path)
+    got = store.as_of("t", BASE + pd.Timedelta(seconds=1), root=tmp_path, columns=["id"])
+    assert list(got.columns) == ["id"] and list(got["id"]) == [1]

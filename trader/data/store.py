@@ -83,9 +83,9 @@ def keys(table, columns, root=None):
         )
 
 
-def as_of(table, ts, root=None):
-    """All rows of `table` with available_at <= ts. ts must be timezone-aware: a naive time is ambiguous by
-    hours, which is exactly the size of the leaks this guards against."""
+def as_of(table, ts, root=None, columns=None):
+    """All rows of `table` with available_at <= ts (only `columns`, if given). ts must be timezone-aware: a naive
+    time is ambiguous by hours, which is exactly the size of the leaks this guards against."""
     ts = pd.Timestamp(ts)
     if ts.tzinfo is None:
         raise ValueError("as_of needs a timezone-aware timestamp")
@@ -94,7 +94,8 @@ def as_of(table, ts, root=None):
         return pd.DataFrame()
     with duckdb.connect() as con:
         con.execute("SET TimeZone = 'UTC'")
+        cols = ", ".join(f'"{c}"' for c in columns) if columns else "*"
         return con.execute(
-            "SELECT * FROM read_parquet(?, union_by_name = true) WHERE available_at <= ? ORDER BY available_at",
+            f"SELECT {cols} FROM read_parquet(?, union_by_name = true) WHERE available_at <= ? ORDER BY available_at",
             [str(folder / "*.parquet"), ts.to_pydatetime()],
         ).df()

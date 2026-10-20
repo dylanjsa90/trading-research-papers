@@ -42,18 +42,23 @@ You read one news article or filing excerpt about US-listed companies and record
 Describe the text only. Never forecast prices, returns or market reactions, and never add facts from outside \
 the text. Companies may appear as placeholders such as "Company 1" and dates as [DATE]; report them as given.
 
-- symbols: the tagged tickers the text is materially about (may be empty).
-- event_type: the main event: earnings, guidance, m&a, legal_regulatory, product, management, macro, \
-analyst_action or other.
-- sentiment: how favourably the text presents the news for those companies, from -1 (clearly negative) to 1 \
-(clearly positive); 0 if neutral or mixed.
+- symbols: the tagged tickers that are a main subject of the text, not ones mentioned in passing (may be empty).
+- event_type: the main company event: earnings, guidance, m&a, legal_regulatory, product, management, macro, \
+analyst_action or other. A story that only reports price moves, with no new company information, is other.
+- sentiment: what the new information means for those companies, from -1 to 1, judged by the news itself, not \
+by any price move the text reports. About ±0.2 for minor news; about ±0.5 for clear news such as a beat or miss, \
+an upgrade or downgrade, or a contract win; ±0.8 or beyond only for major news such as a large beat with raised \
+guidance, a takeover offer, fraud charges or a failed drug trial; 0 if neutral or mixed.
 - surprise: how unexpected the text itself says the news is (for example a beat or miss against estimates, or \
 an unscheduled announcement): none, low, med or high.
 - confidence: how clearly the text supports your event_type and sentiment, from 0 to 1.
-- horizon_days: for how many days the information stays relevant to the companies' fundamentals, 1 to 365.
-- relevant: false for market wraps, lists of movers, promotions, or texts that mention the companies only in \
-passing."""
-NEWS = Task("tags", Extraction, NEWS_SYSTEM, "news-v1", 300)
+- horizon_days: roughly how many days the information stays relevant to the companies' fundamentals: about 1 to \
+5 for price-move stories and routine analyst notes, 30 to 90 for earnings and guidance, 90 to 365 for M&A, \
+major legal or regulatory outcomes, leadership changes and major products.
+- relevant: true only if the text carries news specific to the companies in symbols. False for market wraps, \
+pre-market or movers lists, roundups of many stocks, promotions, and texts that only report price moves."""
+# v2 (2026-10-19): v1 marked 98% relevant, gave horizon 365 to 85% and sentiment ±1 to 38% of a 200-article sample.
+NEWS = Task("tags", Extraction, NEWS_SYSTEM, "news-v2", 300)
 
 
 def _plain(html):
